@@ -27,9 +27,13 @@ class TwitterDataSource(SocialDataSource):
         )
 
     def get_recent(self, **kwargs):
-        tweet_user = kwargs["tweet_url"]
+        tweet_user = kwargs["tweet_user"]
 
-        twitter_user = self.api.get_user(username=tweet_user)["data"]
+        twitter_user = self.api.get_user(username=tweet_user)
+
+        if "data" not in twitter_user:
+            self.logger.warning(f"{tweet_user} is not a valid Twitter user")
+            return []
 
         start_time = datetime.utcnow() - timedelta(hours=1)
         start_time_string = start_time.strftime("%Y-%m-%dT%H:%M:%SZ")
