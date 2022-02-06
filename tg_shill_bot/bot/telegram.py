@@ -602,7 +602,7 @@ Data Source Types:
 
         recent_tweets = []
         for user in twitter_sources:
-            for tweet in twitter_ds.get_recent(tweet_url=user.name):
+            for tweet in twitter_ds.get_recent(tweet_user=user.name):
                 known_tracking = (
                     self.db_session.query(ShillLinkTracker)
                     .filter(
