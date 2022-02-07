@@ -1,13 +1,18 @@
 import logging
+from pprint import pprint
 import re
 import os
+import typing
 
 import praw
+from nltk.sentiment import SentimentIntensityAnalyzer
 
 from tg_shill_bot.data_sources import SocialDataSource
 
 
 class RedditDataSource(SocialDataSource):
+    sia = SentimentIntensityAnalyzer()
+
     link_pattern = re.compile(
         r"(https?://(?:www\.)?reddit\.com/r/(?P<name>\w+)(/comments/(?P<id>\w+(?:/\w+)?))?)"
     )
@@ -28,15 +33,20 @@ class RedditDataSource(SocialDataSource):
         if "upvotes" in kwargs:
             upvotes = kwargs["upvotes"]
 
-        subreddit = self.api.subreddit(kwargs["subreddit"])
-        new_posts = subreddit.new(limit=10)
+        if "subreddit" in kwargs:
+            subreddit = self.api.subreddit(kwargs["subreddit"])
+            new_posts = subreddit.new(limit=20)
 
-        trending_posts = []
-        for post in new_posts:
-            if post.score >= upvotes:
-                trending_posts.append(post)
+            filtered_new_posts = []
+            for post in new_posts:
+                if not post.stickied and post.is_self:
+                    score = self.sia.polarity_scores(post.title)["compound"]
+                    if score > 0:
+                        filtered_new_posts.append(post.url)
 
-        return trending_posts
+            return filtered_new_posts
+
+        return []
 
     def check_engagement(self, **kwargs):
         pass

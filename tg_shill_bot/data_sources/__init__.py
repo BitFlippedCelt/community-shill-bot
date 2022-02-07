@@ -1,4 +1,5 @@
 import abc
+import typing
 
 
 class SocialDataSource(metaclass=abc.ABCMeta):
