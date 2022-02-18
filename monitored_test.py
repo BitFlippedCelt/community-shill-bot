@@ -48,7 +48,7 @@ def cli(
 
     start_time = datetime.utcnow() - timedelta(hours=1)
 
-    chats = session.query(ShillChatRoomSettings).all()
+    chats = session.query(ChatRoom).all()
     for chat in chats:
         twitter_ds = TwitterDataSource(
             api_key=twitter_api_key,
@@ -57,13 +57,13 @@ def cli(
         )
 
         twitter_feeds = (
-            session.query(ShillLinkTracker)
+            session.query(LinkTracker)
             .filter(
-                ShillLinkTracker.chat_id == chat.chat_id,
-                ShillLinkTracker.created_at > start_time,
-                ShillLinkTracker.link_type == "twitter",
+                LinkTracker.chat_id == chat.chat_id,
+                LinkTracker.created_at > start_time,
+                LinkTracker.link_type == "twitter",
             )
-            .order_by(ShillLinkTracker.created_at.desc())
+            .order_by(LinkTracker.created_at.desc())
             .all()
         )
 

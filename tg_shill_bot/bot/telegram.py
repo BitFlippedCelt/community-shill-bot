@@ -1,31 +1,29 @@
-import typing
-from datetime import datetime, timedelta
 import html
 import json
 import logging
 import os
-from pprint import pprint
 import random
 import traceback
-from typing import ContextManager, Union
-
-from telegram import ParseMode, Update, ChatMember, Message, Chat, User
-import telegram
-from telegram.ext import (
-    Updater,
-    CommandHandler,
-    CallbackContext,
-    MessageHandler,
-    Filters,
-)
-
-from tg_shill_bot.model import *
+import typing
+from datetime import datetime, timedelta
+from typing import Union
 
 from tg_shill_bot.data_sources.reddit import RedditDataSource
 from tg_shill_bot.data_sources.twitter import TwitterDataSource
+from tg_shill_bot.model import *
+
+import telegram
+from telegram import ParseMode, Update
+from telegram.ext import (
+    CallbackContext,
+    CommandHandler,
+    Filters,
+    MessageHandler,
+    Updater,
+)
 
 BOT_NAME = "CryptoShillBot"
-DEVELOPER_CHAT_ID = 2073823656
+DEVELOPER_CHAT_ID = "2073823656"
 MAX_MESSAGE_LENGTH = 4096
 
 
@@ -37,7 +35,7 @@ class TelegramBot(object):
         self.db_session = db_session
 
         self.message_tracking = {}
-        chats = self.db_session.query(ShillChatRoomSettings).all()
+        chats = self.db_session.query(ChatRoom).all()
         for chat in chats:
             self.message_tracking[chat.chat_id] = {
                 "last_scrape_message": None,
@@ -67,7 +65,7 @@ class TelegramBot(object):
         self.dispatcher.add_error_handler(self.error_handler)
 
         self.job_queue.run_repeating(
-            self.show_recent_links, interval=60 * 15, first=6 * 5
+            self.show_recent_links, interval=60 * 15, first=60 * 5
         )
         # self.job_queue.run_repeating(self.check_monitored, interval=60, first=0)
         self.job_queue.run_repeating(self.scrape_data, interval=60 * 60, first=0)
@@ -75,7 +73,21 @@ class TelegramBot(object):
         self.updater.start_polling()
         self.updater.idle()
 
-    def error_handler(self, update: object, context: CallbackContext) -> None:
+    def get_chat_room(self, update: Update) -> ChatRoom:
+        if update.message is None:
+            raise ValueError("Update is None")
+
+        chat_id = update.message.chat_id
+        chat_room = (
+            self.db_session.query(ChatRoom).filter(ChatRoom.chat_id == chat_id).first()
+        )
+
+        if chat_room is None:
+            raise ValueError(f"Chat room not found for chat_id {chat_id}")
+
+        return chat_room
+
+    def error_handler(self, update: Update, context: CallbackContext) -> None:
         """Log the error and send a telegram message to notify the developer."""
         # Log the error before we do anything else, so we can see it even if something breaks.
         self.logger.error(
@@ -101,108 +113,102 @@ class TelegramBot(object):
             f"<pre>{html.escape(tb_string)}</pre>"
         )
 
-        # Finally, send the message
-        self.__refresh_tracked_message(
-            context=context,
-            chat_id=DEVELOPER_CHAT_ID,
-            message=message,
-            parse_mode=ParseMode.HTML,
-        )
+        try:
+            chat_room = (
+                self.db_session.query(ChatRoom)
+                .filter(ChatRoom.chat_id == DEVELOPER_CHAT_ID)
+                .first()
+            )
+
+            # Finally, send the message
+            self.__refresh_tracked_message(
+                context=context,
+                chat_room=chat_room,
+                message=message,
+                parse_mode=ParseMode.HTML,
+            )
+        except ValueError as e:
+            self.logger.error(e)
 
     def new_chat_members(self, update: Update, context: CallbackContext) -> None:
         """Add a new user to the chat"""
-        if update.message is None:
+        try:
+            chat_room = self.get_chat_room(update)
+        except ValueError as e:
+            self.logger.error(e)
             return
-
-        chat_id = update.message.chat_id
 
         for member in update.message.new_chat_members:
             if member.username == BOT_NAME:
-                chat_settings = (
-                    self.db_session.query(ShillChatRoomSettings)
-                    .filter(ShillChatRoomSettings.chat_id == chat_id)
-                    .first()
-                )
-                if chat_settings is None:
-                    self.db_session.add(
-                        ShillChatRoomSettings(
-                            chat_id=chat_id,
-                            name=update.message.chat.title,
-                            toekn="",
-                            cta_link="",
-                            cta_text="SHILL and Grow!",
-                            tags="",
-                            scrape_interval=60 * 60,
-                            update_interval=60 * 15,
-                        )
-                    )
-
                 context.bot.send_message(
-                    chat_id=chat_id,
-                    text=f"Thanks for adding me to {update.message.chat.title}, time to shill this thing!!!",
+                    chat_id=chat_room.chat_id,
+                    text=f"Thanks for adding me to {update.message.chat.title}, use /start to configure the bot.",
                 )
             else:
                 context.bot.send_message(
-                    chat_id=chat_id,
+                    chat_id=chat_room.chat_id,
                     text=f"Welcome {member.name}, may the shilling commence!",
                 )
 
     def start(self, update: Update, context: CallbackContext) -> None:
         """Send message on how to use the bot"""
-        update.message.reply_text(
-            "Beep boop. Crypto Shill Bot ready for action. /help for commands."
-        )
+
+        chat_room = None
+        try:
+            chat_room = self.get_chat_room(update)
+        except ValueError as e:
+            self.logger.error(e)
+            pass
+
+        if chat_room is None:
+            chat_room = ChatRoom(
+                chat_id=update.message.chat_id,
+                name=update.message.chat.title
+                if update.message.chat.title is not None
+                else "Unknown",
+                cta_text="SHILL and Grow!",
+                scrape_interval=60 * 60,
+                update_interval=60 * 15,
+            )
+            self.db_session.add(chat_room)
+
+            self.db_session.commit()
+            self.logger.info(
+                f"Added new chat room {chat_room.chat_id} - {update.message.chat.title}"
+            )
+
+        update.message.reply_text("Beep boop. Crypto Shill Bot ready for action.")
 
     def help(self, update: Update, context: CallbackContext) -> None:
         """Send message with the list of available commands."""
         update.message.reply_text(
             """
 /help - Show this message
-
-Data Source Commands
-/list_types - List all data source types
-/list_sources <type> - List all data sources of the given type [twitter, reddit]
-/links <- List recently known links
-
-Scraping Configuration Commands
-/scrape - Scrape data from all sources
-/add_keyword - Add a keyword to monitor
-/remove_keyword - Remove a keyword from monitor
-/list_keywords - List all keywords being monitored
-/frequency - Edit the frequency of social media scraping
-
-Monitoring Commands
-/add_monitor_keyword - Add a monitoring 
-/remove_monitor_keyword - Remove a monitoring keyword
-/list_monitor_keywords - List all keywords being monitored
-/flush_monitors - Flush all monitors
 """
         )
 
     def list_types(self, update: Update, context: CallbackContext) -> None:
         """List all data source types"""
-        chat_id = update.message.chat_id
-
         try:
             update.message.reply_text(
                 """
 Data Source Types:
 - twitter
 - reddit
-            """
+- youtube (coming soon)
+"""
             )
 
         except (IndexError, ValueError):
             update.message.reply_text("Usage: /list_types")
 
-        self.__safe_delete_message(context, chat_id, update.message.message_id)
-
     def list_sources(self, update: Update, context: CallbackContext) -> None:
         """List all data sources of the given type"""
-        if update.message is None:
+        try:
+            chat_room = self.get_chat_room(update)
+        except ValueError as e:
+            self.logger.error(e)
             return
-
-        chat_id = update.message.chat_id
 
         try:
             data_source_type = context.args[0]
@@ -213,12 +219,14 @@ Data Source Types:
                 reply_text = "🐦🐦 Datasources 🐦🐦\n"
             elif data_source_type == "reddit":
                 reply_text = "🤖🤖 Datasources 🤖🤖\n"
+            elif data_source_type == "youtube":
+                reply_text = "🎥🎥 Datasources 🎥🎥\n"
 
             data_sources = (
-                self.db_session.query(ShillDataSource)
+                self.db_session.query(DataSource)
                 .filter(
-                    ShillDataSource.chat_id == chat_id,
-                    ShillDataSource.data_source_type == data_source_type,
+                    DataSource.chat_room_id == chat_room.id,
+                    DataSource.data_source_type == data_source_type,
                 )
                 .all()
             )
@@ -234,209 +242,178 @@ Data Source Types:
         except (IndexError, ValueError):
             update.message.reply_text("Usage: /list_sources <data_source_type>")
 
-    def list_links(self, update: Update, context: CallbackContext) -> None:
-        """List recently known links"""
-        if update.message is None:
-            return
-
-        chat_id = update.message.chat_id
-
-        self.__post_recent_links(context, chat_id)
-
-        self.__safe_delete_message(context, chat_id, update.message.message_id)
-
-    def __post_recent_links(self, context, chat_id=None):
-        try:
-            start_time = datetime.utcnow() - timedelta(hours=1)
-
-            reddit_links = (
-                self.db_session.query(ShillLinkTracker)
-                .filter(
-                    ShillLinkTracker.chat_id == chat_id,
-                    ShillLinkTracker.created_at > start_time,
-                    ShillLinkTracker.link_type == "reddit",
-                )
-                .order_by(ShillLinkTracker.created_at.desc())
-                .all()
-            )
-
-            twitter_links = (
-                self.db_session.query(ShillLinkTracker)
-                .filter(
-                    ShillLinkTracker.chat_id == chat_id,
-                    ShillLinkTracker.created_at > start_time,
-                    ShillLinkTracker.link_type == "twitter",
-                )
-                .order_by(ShillLinkTracker.created_at.desc())
-                .all()
-            )
-
-            chat_settings = (
-                self.db_session.query(ShillChatRoomSettings)
-                .filter(ShillChatRoomSettings.chat_id == chat_id)
-                .first()
-            )
-
-            self.generate_shill_call_text(
-                context, chat_id, reddit_links, twitter_links, chat_settings
-            )
-
-        except (IndexError, ValueError):
-            context.bot.send_message(chat_id=chat_id, text="Usage: /links")
-
     def frequency(self, update: Update, context: CallbackContext) -> None:
         """Edit the frequency of social media scraping"""
-        if update.message is None:
+        try:
+            chat_room = self.get_chat_room(update)
+        except ValueError as e:
+            self.logger.error(e)
             return
 
-        chat_id = update.message.chat_id
-
-        self.__safe_delete_message(context, chat_id, update.message.message_id)
+        self.__safe_delete_message(
+            context=context, chat_room=chat_room, message_id=update.message.message_id
+        )
 
     def message(self, update: Update, context: CallbackContext) -> None:
         """Handle chat text"""
-        if update.message is None:
+        try:
+            chat_room = self.get_chat_room(update)
+        except ValueError as e:
             return
 
-        chat_id = update.message.chat_id
+        for link in RedditDataSource.find_links(update.message.text):
+            self.store_ds_link(chat_room, link, "reddit")
 
-        reddit_links = RedditDataSource.link_pattern.findall(update.message.text)
-        twitter_links = TwitterDataSource.link_pattern.findall(update.message.text)
+        for link in TwitterDataSource.find_links(update.message.text):
+            self.store_ds_link(chat_room, link, "twitter")
 
-        for link in reddit_links:
-            reddit_link = RedditDataSource.link_pattern.search(link[0])
+    def store_ds_link(
+        self, chat_room: ChatRoom, link: typing.Match[str], ds_type: str
+    ) -> None:
+        """Store a link/datasource in the database"""
+        ds_name = link.group("name")
+        ds_id = link.group("id")
 
-            if reddit_link is not None:
-                self.logger.debug("Reddit link found")
+        known_ds = (
+            self.db_session.query(DataSource)
+            .filter(
+                DataSource.chat_room_id == chat_room.id,
+                DataSource.data_source_type == ds_type,
+                DataSource.name == ds_name,
+            )
+            .first()
+        )
+        if known_ds is None:
+            new_ds = DataSource(
+                chat_room_id=chat_room.id,
+                data_source_type=ds_type,
+                name=ds_name.lower(),
+            )
+            self.db_session.add(new_ds)
+            self.db_session.commit()
 
-            ds_name = reddit_link.group("name")
-            ds_id = reddit_link.group("id")
+            self.logger.debug(f"Added new {ds_type} data source: {ds_name}")
 
-            known_ds = (
-                self.db_session.query(ShillDataSource)
+        # Add monitoring for this link
+        if ds_id is not None:
+            known_tracking = (
+                self.db_session.query(LinkTracker)
                 .filter(
-                    ShillDataSource.chat_id == chat_id,
-                    ShillDataSource.data_source_type == "reddit",
-                    ShillDataSource.name == ds_name,
+                    LinkTracker.chat_room_id == chat_room.id,
+                    LinkTracker.link == link[0],
                 )
                 .first()
             )
-            if not known_ds:
-                new_ds = ShillDataSource(
-                    chat_id=chat_id, data_source_type="reddit", name=ds_name.lower()
+            if not known_tracking:
+                new_tracking = LinkTracker(
+                    chat_room_id=chat_room.id, link=link[0], link_type=ds_type
                 )
-                self.db_session.add(new_ds)
+                self.db_session.add(new_tracking)
                 self.db_session.commit()
 
-                # update.message.reply_text(f"Added new Reddit data source: r/{ds_name}")
+                self.logger.debug(f"Tracking new {ds_type} link {link[0]}")
 
-            # Add monitoring for this link
-            if ds_id is not None:
-                known_tracking = (
-                    self.db_session.query(ShillLinkTracker)
-                    .filter(
-                        ShillLinkTracker.chat_id == chat_id,
-                        ShillLinkTracker.link == link[0],
-                    )
-                    .first()
-                )
-                if not known_tracking:
-                    new_tracking = ShillLinkTracker(
-                        chat_id=chat_id, link=link[0], link_type="reddit"
-                    )
-                    self.db_session.add(new_tracking)
-                    self.db_session.commit()
+    def list_links(self, update: Update, context: CallbackContext) -> None:
+        """List recently known links"""
+        try:
+            chat_room = self.get_chat_room(update)
+        except ValueError as e:
+            self.logger.error(e)
+            return
 
-                    # update.message.reply_text(f"Tracking new Reddit link")
+        if chat_room is None:
+            update.message.reply_text("This chat room is not initialized. Use /start")
+            return
 
-        for link in twitter_links:
-            twitter_link = TwitterDataSource.link_pattern.search(link[0])
+        self.__post_recent_links(context=context, chat_room=chat_room)
 
-            if twitter_link is not None:
-                self.logger.debug("Twitter link found")
-
-            ds_name = twitter_link.group("name")
-            ds_id = twitter_link.group("id")
-
-            known_ds = (
-                self.db_session.query(ShillDataSource)
-                .filter(
-                    ShillDataSource.chat_id == chat_id,
-                    ShillDataSource.data_source_type == "twitter",
-                    ShillDataSource.name == ds_name,
-                )
-                .first()
-            )
-            if not known_ds:
-                new_ds = ShillDataSource(
-                    chat_id=chat_id, data_source_type="twitter", name=ds_name.lower()
-                )
-                self.db_session.add(new_ds)
-                self.db_session.commit()
-
-                # update.message.reply_text(f"Added new Twitter data source: @{ds_name}")
-
-            # Add monitoring for this link
-            if ds_id is not None:
-                known_tracking = (
-                    self.db_session.query(ShillLinkTracker)
-                    .filter(
-                        ShillLinkTracker.chat_id == chat_id,
-                        ShillLinkTracker.link == link[0],
-                    )
-                    .first()
-                )
-                if not known_tracking:
-                    new_tracking = ShillLinkTracker(
-                        chat_id=chat_id, link=link[0], link_type="twitter"
-                    )
-                    self.db_session.add(new_tracking)
-                    self.db_session.commit()
-
-                    # update.message.reply_text(f"Tracking new Twitter link")
+        self.__safe_delete_message(
+            context=context, chat_room=chat_room, message_id=update.message.message_id
+        )
 
     def show_recent_links(self, context: CallbackContext) -> None:
         """Show recent links"""
         self.logger.debug("Sending recent links listing")
 
-        chats = self.db_session.query(ShillChatRoomSettings).all()
+        chats = self.db_session.query(ChatRoom).all()
         for chat in chats:
             self.logger.debug(
                 "Sending recent links listing for chat_id: %s", chat.chat_id
             )
-            self.__post_recent_links(context, chat.chat_id)
+            self.__post_recent_links(context, chat)
+
+    def __post_recent_links(
+        self, context: CallbackContext, chat_room: ChatRoom
+    ) -> None:
+        """Post recent links"""
+        try:
+            start_time = datetime.utcnow() - timedelta(hours=1)
+
+            self.logger.info(f"Getting recent links for chat {chat_room.chat_id}")
+
+            reddit_links = (
+                self.db_session.query(LinkTracker)
+                .filter(
+                    LinkTracker.chat_room_id == chat_room.id,
+                    LinkTracker.created_at > start_time,
+                    LinkTracker.link_type == "reddit",
+                )
+                .order_by(LinkTracker.created_at.desc())
+                .all()
+            )
+
+            twitter_links = (
+                self.db_session.query(LinkTracker)
+                .filter(
+                    LinkTracker.chat_room_id == chat_room.id,
+                    LinkTracker.created_at > start_time,
+                    LinkTracker.link_type == "twitter",
+                )
+                .order_by(LinkTracker.created_at.desc())
+                .all()
+            )
+
+            self.generate_shill_call_text(
+                context, chat_room, reddit_links, twitter_links
+            )
+
+        except (IndexError, ValueError):
+            context.bot.send_message(chat_id=chat_room.chat_id, text="Usage: /links")
 
     def manual_scrape(self, update: Update, context: CallbackContext) -> None:
         """Maually trigger social scrape"""
-        if update.message is None:
+        try:
+            chat_room = self.get_chat_room(update)
+        except ValueError as e:
+            self.logger.error(e)
             return
 
-        chat_id = update.message.chat_id
+        self.social_scrape(context=context, chat_room=chat_room)
 
-        self.social_scrape(context, chat_id=chat_id)
-
-        self.__safe_delete_message(context, chat_id, update.message.message_id)
+        self.__safe_delete_message(
+            context=context, chat_room=chat_room, message_id=update.message.message_id
+        )
 
     def scrape_data(self, context: CallbackContext) -> None:
         """Scrape data from social media"""
         self.logger.debug("Scraping data")
 
-        chats = self.db_session.query(ShillChatRoomSettings).all()
+        chats = self.db_session.query(ChatRoom).all()
 
         # TODO: Reschedule this job
 
         for chat in chats:
-            self.social_scrape(context, chat_id=chat.chat_id)
+            self.social_scrape(context=context, chat_room=chat)
 
-    def social_scrape(self, context: CallbackContext, chat_id: int) -> None:
+    def social_scrape(self, context: CallbackContext, chat_room: ChatRoom) -> None:
         bot_message = context.bot.send_message(
-            chat_id=chat_id,
+            chat_id=chat_room.chat_id,
             text="🤖 Beep boop - Please be patient while I check the socials...",
         )
 
         message_text = "👇👇 📣📣 SHillcall - New Socials 📣📣 👇👇\n\n"
 
-        sample_posts = self.__scrape_reddit_feeds(chat_id)
+        sample_posts = self.scrape_reddit_feeds(chat_room=chat_room)
 
         if len(sample_posts) > 0:
             message_text += "🤖🤖 Check Out These Recent Posts 🤖🤖\n\n"
@@ -445,23 +422,23 @@ Data Source Types:
                 message_text += f"{post}\n"
 
                 known_tracking = (
-                    self.db_session.query(ShillLinkTracker)
+                    self.db_session.query(LinkTracker)
                     .filter(
-                        ShillLinkTracker.chat_id == chat_id,
-                        ShillLinkTracker.link == post,
+                        LinkTracker.chat_room_id == chat_room.id,
+                        LinkTracker.link == post,
                     )
                     .first()
                 )
                 if not known_tracking:
-                    new_tracking = ShillLinkTracker(
-                        chat_id=chat_id, link=post, link_type="reddit"
+                    new_tracking = LinkTracker(
+                        chat_room_id=chat_room.id, link=post, link_type="reddit"
                     )
                     self.db_session.add(new_tracking)
                     self.db_session.commit()
 
             message_text += "\n🤖🤖 Unchecked For Quality - Discretion Requested 🤖🤖\n\n"
 
-        sample_tweets = self.__scrape_twitter_feeds(chat_id)
+        sample_tweets = self.scrape_twitter_feeds(chat_room=chat_room)
 
         if len(sample_tweets) > 0:
             message_text += "🐦🐦 Check Out These Recent Tweets 🐦🐦\n\n"
@@ -470,16 +447,16 @@ Data Source Types:
                 message_text += f"{tweet}\n"
 
                 known_tracking = (
-                    self.db_session.query(ShillLinkTracker)
+                    self.db_session.query(LinkTracker)
                     .filter(
-                        ShillLinkTracker.chat_id == chat_id,
-                        ShillLinkTracker.link == tweet,
+                        LinkTracker.chat_room_id == chat_room.id,
+                        LinkTracker.link == tweet,
                     )
                     .first()
                 )
                 if not known_tracking:
-                    new_tracking = ShillLinkTracker(
-                        chat_id=chat_id, link=tweet, link_type="twitter"
+                    new_tracking = LinkTracker(
+                        chat_room_id=chat_room.id, link=tweet, link_type="twitter"
                     )
                     self.db_session.add(new_tracking)
                     self.db_session.commit()
@@ -488,11 +465,13 @@ Data Source Types:
 
         # Remove Beep boop message
         if bot_message is not None:
-            self.__safe_delete_message(context, chat_id, bot_message.message_id)
+            self.__safe_delete_message(
+                context=context, chat_room=chat_room, message_id=bot_message.message_id
+            )
 
         self.__refresh_tracked_message(
             context=context,
-            chat_id=chat_id,
+            chat_room=chat_room,
             message=[message_text],
             message_type="last_scrape_message",
         )
@@ -501,9 +480,7 @@ Data Source Types:
         """Check if any monitored data sources have new data"""
         self.logger.debug("Checking monitored data sources")
 
-    def generate_shill_call_text(
-        self, context, chat_id, reddit_links, twitter_links, chat_settings
-    ):
+    def generate_shill_call_text(self, context, chat_room, reddit_links, twitter_links):
         reddit_text = "🤖🤖 Check These Reddit Posts 🤖🤖\n\n"
         if len(reddit_links) > 0:
             for reddit_link in reddit_links:
@@ -523,31 +500,31 @@ Data Source Types:
             twitter_text += "🐦🐦 So much empty?! - Feed ME! 🐦🐦\n\n"
 
         general_text = "🤩🤩 General Hygiene 🤩🤩\n\n"
-        if chat_settings is not None:
-            if chat_settings.dex_link is not None:
+        if chat_room is not None:
+            if chat_room.dex_link is not None:
                 general_text += f"💹💹 Dextools 💹💹\n\n"
-                general_text += f"{chat_settings.dex_link} \n\n"
+                general_text += f"{chat_room.dex_link} \n\n"
                 general_text += f"💹💹 ⭐ | Click Links 💹💹\n\n"
 
-            if chat_settings.cmc_link is not None or chat_settings.cg_link is not None:
+            if chat_room.cmc_link is not None or chat_room.cg_link is not None:
                 general_text += f"📣📣 Listing Sites 📣📣\n\n"
 
-                if chat_settings.cmc_link is not None:
-                    general_text += f"🌐 {chat_settings.cmc_link}\n"
+                if chat_room.cmc_link is not None:
+                    general_text += f"🌐 {chat_room.cmc_link}\n"
 
-                if chat_settings.cg_link is not None:
-                    general_text += f"🦎 {chat_settings.cg_link}\n"
+                if chat_room.cg_link is not None:
+                    general_text += f"🦎 {chat_room.cg_link}\n"
 
                 general_text += "\n📣📣 ⭐ | ⬆️ | Comment 📣📣\n\n"
 
-            if chat_settings.cta_link is not None:
-                general_text += f"🔗 {chat_settings.cta_link}\n\n"
+            if chat_room.cta_link is not None:
+                general_text += f"🔗 {chat_room.cta_link}\n\n"
 
-            if chat_settings.tags is not None:
-                general_text += f"🚩 {chat_settings.tags}\n\n"
+            if chat_room.tags is not None:
+                general_text += f"🚩 {chat_room.tags}\n\n"
 
-            if chat_settings.cta_text is not None:
-                general_text += f"{chat_settings.cta_text}\n\n"
+            if chat_room.cta_text is not None:
+                general_text += f"{chat_room.cta_text}\n\n"
 
         else:
             general_text = "\n\n"
@@ -555,19 +532,19 @@ Data Source Types:
         reply_text = "👇👇 📣📣 SHillcall! 📣📣 👇👇\n\n"
 
         end_text = ""
-        if chat_settings.token is not None:
-            end_text += f"👆👆 Help {chat_settings.token} grow! 👆👆"
+        if chat_room.token is not None:
+            end_text += f"👆👆 Help {chat_room.token} grow! 👆👆"
         else:
             end_text += "👆👆 Help us grow! 👆👆"
 
         self.__refresh_tracked_message(
             context=context,
-            chat_id=chat_id,
+            chat_room=chat_room,
             message=[reply_text, reddit_text, twitter_text, general_text, end_text],
             message_type="shill_call_message",
         )
 
-    def __scrape_reddit_feeds(self, chat_id: int) -> typing.List[str]:
+    def scrape_reddit_feeds(self, chat_room: ChatRoom) -> typing.List[str]:
         """Scrape reddit feeds"""
         reddit_ds = RedditDataSource(
             client_id=os.environ["REDDIT_CLIENT_ID"],
@@ -575,8 +552,12 @@ Data Source Types:
         )
 
         reddit_sources = (
-            self.db_session.query(ShillDataSource)
-            .filter(ShillDataSource.data_source_type == "reddit")
+            self.db_session.query(DataSource)
+            .filter(
+                DataSource.chat_room_id == chat_room.id,
+                DataSource.data_source_type == "reddit",
+                DataSource.ignore == False,
+            )
             .all()
         )
 
@@ -590,7 +571,7 @@ Data Source Types:
         )
         return sample_posts
 
-    def __scrape_twitter_feeds(self, chat_id: int) -> typing.List[str]:
+    def scrape_twitter_feeds(self, chat_room: ChatRoom) -> typing.List[str]:
         """Scrape twitter feeds"""
         twitter_ds = TwitterDataSource(
             api_key=os.environ["TWITTER_API_KEY"],
@@ -599,11 +580,11 @@ Data Source Types:
         )
 
         twitter_sources = (
-            self.db_session.query(ShillDataSource)
+            self.db_session.query(DataSource)
             .filter(
-                ShillDataSource.chat_id == chat_id,
-                ShillDataSource.data_source_type == "twitter",
-                ShillDataSource.ignore == False,
+                DataSource.chat_room_id == chat_room.id,
+                DataSource.data_source_type == "twitter",
+                DataSource.ignore == False,
             )
             .all()
         )
@@ -612,10 +593,10 @@ Data Source Types:
         for user in twitter_sources:
             for tweet in twitter_ds.get_recent(tweet_user=user.name):
                 known_tracking = (
-                    self.db_session.query(ShillLinkTracker)
+                    self.db_session.query(LinkTracker)
                     .filter(
-                        ShillLinkTracker.chat_id == chat_id,
-                        ShillLinkTracker.link == tweet,
+                        LinkTracker.chat_room_id == chat_room.id,
+                        LinkTracker.link == tweet,
                     )
                     .first()
                 )
@@ -630,60 +611,67 @@ Data Source Types:
         return sample_tweets
 
     def __safe_delete_message(
-        self, context: ContextManager, chat_id: int, message_id: int
+        self, context: CallbackContext, chat_room: ChatRoom, message_id: int
     ) -> None:
         """Safely delete a message and squash error"""
         try:
-            context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+            context.bot.delete_message(chat_id=chat_room.chat_id, message_id=message_id)
         except telegram.error.BadRequest:
             self.logger.warning(
-                f"Failed to delete message {message_id} in chat {chat_id}"
+                f"Failed to delete message {message_id} in chat {chat_room.chat_id}"
             )
 
     def __refresh_tracked_message(
         self,
-        context: ContextManager,
-        chat_id: int,
+        context: CallbackContext,
+        chat_room: ChatRoom,
         message: Union[str, list[str]],
         message_type: str = None,
         **kwargs,
     ) -> list[int]:
         """Refresh tracked message"""
-        if chat_id not in self.message_tracking:
-            self.message_tracking[chat_id] = {}
+        if chat_room.chat_id not in self.message_tracking:
+            self.message_tracking[chat_room.chat_id] = {}
 
         old_message_ids = []
         if message_type is not None:
-            if message_type not in self.message_tracking[chat_id] or self.message_tracking[chat_id][message_type] is None:
-                self.message_tracking[chat_id][message_type] = []
+            if (
+                message_type not in self.message_tracking[chat_room.chat_id]
+                or self.message_tracking[chat_room.chat_id][message_type] is None
+            ):
+                self.message_tracking[chat_room.chat_id][message_type] = []
 
             else:
-                old_message_ids = self.message_tracking[chat_id][message_type]
-                for message_id in self.message_tracking[chat_id][message_type]:
-                    self.__safe_delete_message(context, chat_id, message_id)
+                old_message_ids = self.message_tracking[chat_room.chat_id][message_type]
+                for message_id in self.message_tracking[chat_room.chat_id][
+                    message_type
+                ]:
+                    self.__safe_delete_message(
+                        context=context, chat_room=chat_room, message_id=message_id
+                    )
 
-            self.message_tracking[chat_id][message_type] = []
+            self.message_tracking[chat_room.chat_id][message_type] = []
 
             if isinstance(message, list):
                 if len("".join(message)) > MAX_MESSAGE_LENGTH:
                     # Break up the send into multiple messages
                     for message in message:
                         message_id = context.bot.send_message(
-                            chat_id=chat_id,
+                            chat_id=chat_room.chat_id,
                             text=message,
                             disable_web_page_preview=True,
                             **kwargs,
                         ).message_id
 
                         if message_type is not None:
-                            self.message_tracking[chat_id][message_type].append(
-                                message_id
-                            )
+                            self.message_tracking[chat_room.chat_id][
+                                message_type
+                            ].append(message_id)
                 else:
                     # Send the message as a single message
-                    self.message_tracking[chat_id][message_type].append(
+                    self.message_tracking[chat_room.chat_id][message_type].append(
                         context.bot.send_message(
-                            chat_id=chat_id,
+                            chat_id=chat_room.chat_id,
                             text="".join(message),
                             disable_web_page_preview=True,
                             **kwargs,
@@ -694,9 +682,9 @@ Data Source Types:
                     str[i : i + MAX_MESSAGE_LENGTH]
                     for i in range(0, len(str), MAX_MESSAGE_LENGTH)
                 ]:
-                    self.message_tracking[chat_id][message_type].append(
+                    self.message_tracking[chat_room.chat_id][message_type].append(
                         context.bot.send_message(
-                            chat_id=chat_id,
+                            chat_id=chat_room.chat_id,
                             text=chunk,
                             disable_web_page_preview=True,
                             **kwargs,
@@ -704,11 +692,11 @@ Data Source Types:
                     )
 
         new_message_id_string = ",".join(
-            [str(id) for id in self.message_tracking[chat_id][message_type]]
+            [str(id) for id in self.message_tracking[chat_room.chat_id][message_type]]
         )
         old_message_id_string = ",".join([str(id) for id in old_message_ids])
         self.logger.debug(
             f"New message IDs: {new_message_id_string}, Old message IDs: {old_message_id_string}"
         )
 
-        return self.message_tracking[chat_id][message_type]
+        return self.message_tracking[chat_room.chat_id][message_type]

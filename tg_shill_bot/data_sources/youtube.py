@@ -10,11 +10,11 @@ from nltk.sentiment import SentimentIntensityAnalyzer
 from tg_shill_bot.data_sources import SocialDataSource
 
 
-class RedditDataSource(SocialDataSource):
+class YoutubeDataSource(SocialDataSource):
     sia = SentimentIntensityAnalyzer()
 
     link_pattern = re.compile(
-        r"(https?://(?:www\.)?reddit\.com/r/(?P<name>\w+)(/comments/(?P<id>\w+(?:/\w+)?))?)"
+        r"(https?://(?:www\.)?youtube\.com/watch?v=(?P<id>\w+(?:/\w+)?))"
     )
 
     def __init__(self, **kwargs):
@@ -40,7 +40,7 @@ class RedditDataSource(SocialDataSource):
             filtered_new_posts = []
             for post in new_posts:
                 if not post.stickied and post.is_self:
-                    score = self.sia.polarity_scores(post.selftext)["compound"]
+                    score = self.sia.polarity_scores(post.title)["compound"]
                     if score > 0:
                         filtered_new_posts.append(post.url)
 

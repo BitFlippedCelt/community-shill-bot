@@ -58,7 +58,7 @@ def cli(
 
     start_time = datetime.utcnow() - timedelta(hours=1)
 
-    chats = session.query(ShillChatRoomSettings).all()
+    chats = session.query(ChatRoom).all()
     for chat in chats:
         keywords = set()
         if chat.tags is not None:
@@ -73,10 +73,10 @@ def cli(
         )
 
         twitter_sources = (
-            session.query(ShillDataSource)
+            session.query(DataSource)
             .filter(
-                ShillDataSource.chat_id == chat.chat_id,
-                ShillDataSource.data_source_type == "twitter",
+                DataSource.chat_id == chat.chat_id,
+                DataSource.data_source_type == "twitter",
             )
             .all()
         )
@@ -95,10 +95,10 @@ def cli(
         )
 
         reddit_sources = (
-            session.query(ShillDataSource)
+            session.query(DataSource)
             .filter(
-                ShillDataSource.chat_id == chat.chat_id,
-                ShillDataSource.data_source_type == "reddit",
+                DataSource.chat_id == chat.chat_id,
+                DataSource.data_source_type == "reddit",
             )
             .all()
         )
