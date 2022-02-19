@@ -35,7 +35,6 @@ class ChatRoom(Base):
 
     tags = Column(String)
     logo_url = Column(String)
-    logo = Column(BLOB)
 
     link_count = Column(Integer, nullable=False, default=20)
 
