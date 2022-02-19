@@ -4,9 +4,9 @@ version = "0.1.0"
 description = "Telegram bot that monitors socials for shill potential shill targets."
 authors = ["Greg Horejsi <g.horejsi81@gmail.com>"]
 license = "MIT"
-packages = [
-    { include = "tg_shill_bot" }
-]
+# packages = [
+#     { include = "tg_shill_bot" }
+# ]
 
 [tool.poetry.dependencies]
 python = "^3.10"

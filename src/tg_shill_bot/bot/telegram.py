@@ -537,11 +537,40 @@ Data Source Types:
         else:
             end_text += "👆👆 Help us grow! 👆👆"
 
+        ad_text = ""
+        advertisement = (
+            self.db_session.query(Advertisement)
+            .filter(
+                Advertisement.created_at < datetime.now(),
+                Advertisement.start_at < datetime.now(),
+                Advertisement.end_at > datetime.now(),
+            )
+            .first()
+        )
+        if advertisement is not None:
+            ad_text = f"\n\n👾 | <a href='{advertisement.link}'>{advertisement.name} ({advertisement.token})</a>"
+
+            if len(advertisement.buy_link) > 0:
+                ad_text += f" <a href='{advertisement.buy_link}'>💰</a>"
+
+            if len(advertisement.chart_link) > 0:
+                ad_text += f" <a href='{advertisement.chart_link}'>📈</a>"
+
+            ad_text += " | 👾"
+
         self.__refresh_tracked_message(
             context=context,
             chat_room=chat_room,
-            message=[reply_text, reddit_text, twitter_text, general_text, end_text],
+            message=[
+                reply_text,
+                reddit_text,
+                twitter_text,
+                general_text,
+                end_text,
+                ad_text,
+            ],
             message_type="shill_call_message",
+            parse_mode=ParseMode.HTML,
         )
 
     def scrape_reddit_feeds(self, chat_room: ChatRoom) -> typing.List[str]:

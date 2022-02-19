@@ -37,8 +37,12 @@ class ChatRoom(Base):
     logo_url = Column(String)
     logo = Column(BLOB)
 
+    link_count = Column(Integer, nullable=False, default=20)
+
     scrape_interval = Column(Integer, nullable=False, default=60 * 60)
     update_interval = Column(Integer, nullable=False, default=60 * 30)
+
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     data_sources = relationship("DataSource")
     link_trackers = relationship("LinkTracker")
