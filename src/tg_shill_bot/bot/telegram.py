@@ -8,6 +8,7 @@ from tg_shill_bot.bot.common import CommonBot
 
 from tg_shill_bot.data_sources.reddit import RedditDataSource
 from tg_shill_bot.data_sources.twitter import TwitterDataSource
+from tg_shill_bot.data_sources.youtube import YoutubeDataSource
 from tg_shill_bot.model import *
 
 import telegram
@@ -21,6 +22,7 @@ from telegram.ext import (
 )
 
 from tg_shill_bot.model import data_source
+from tg_shill_bot.model import link_tracker
 
 DEVELOPER_CHAT_ID = "2073823656"
 MAX_MESSAGE_LENGTH = 4096
@@ -103,6 +105,9 @@ class TelegramBot(CommonBot):
 
         for link in TwitterDataSource.find_links(update.message.text):
             self.store_link(chat_room, link, "twitter")
+
+        for link in YoutubeDataSource.find_links(update.message.text):
+            self.store_link(chat_room, link, "youtube")
 
     def command_start(self, update: Update, context: CallbackContext) -> None:
         """Send message on how to use the bot"""
@@ -317,68 +322,34 @@ class TelegramBot(CommonBot):
 
         # message_text = "👇👇 📣📣 SHillcall - New Socials 📣📣 👇👇\n\n"
 
-        # sample_posts = self.scrape_reddit_feeds(chat_room=chat_room)
+        posts = self.scrape_reddit_feeds(chat_room=chat_room)
+        for post in posts:
+            link_tracker = LinkTracker(
+                chat_room=chat_room, link=post, link_type="reddit"
+            )
+            self.db_session.add(link_tracker)
 
-        # if len(sample_posts) > 0:
-        #     message_text += "🤖🤖 Check Out These Recent Posts 🤖🤖\n\n"
+        tweets = self.scrape_twitter_feeds(chat_room=chat_room)
+        for tweet in tweets:
+            link_tracker = LinkTracker(
+                chat_room_id=chat_room.id, link=tweet, link_type="twitter"
+            )
+            self.db_session.add(link_tracker)
 
-        #     for post in sample_posts:
-        #         message_text += f"{post}\n"
+        videos = self.scrape_youtube_feeds(chat_room=chat_room)
+        for video in videos:
+            link_tracker = LinkTracker(
+                chat_room_id=chat_room.id, link=video, link_type="youtube"
+            )
+            self.db_session.add(link_tracker)
 
-        #         known_tracking = (
-        #             self.db_session.query(LinkTracker)
-        #             .filter(
-        #                 LinkTracker.chat_room_id == chat_room.id,
-        #                 LinkTracker.link == post,
-        #             )
-        #             .first()
-        #         )
-        #         if not known_tracking:
-        #             new_tracking = LinkTracker(
-        #                 chat_room_id=chat_room.id, link=post, link_type="reddit"
-        #             )
-        #             self.db_session.add(new_tracking)
-        #             self.db_session.commit()
-
-        #     message_text += "\n🤖🤖 Unchecked For Quality - Discretion Requested 🤖🤖\n\n"
-
-        # sample_tweets = self.scrape_twitter_feeds(chat_room=chat_room)
-
-        # if len(sample_tweets) > 0:
-        #     message_text += "🐦🐦 Check Out These Recent Tweets 🐦🐦\n\n"
-
-        #     for tweet in sample_tweets:
-        #         message_text += f"{tweet}\n"
-
-        #         known_tracking = (
-        #             self.db_session.query(LinkTracker)
-        #             .filter(
-        #                 LinkTracker.chat_room_id == chat_room.id,
-        #                 LinkTracker.link == tweet,
-        #             )
-        #             .first()
-        #         )
-        #         if not known_tracking:
-        #             new_tracking = LinkTracker(
-        #                 chat_room_id=chat_room.id, link=tweet, link_type="twitter"
-        #             )
-        #             self.db_session.add(new_tracking)
-        #             self.db_session.commit()
-
-        #     message_text += "\n🐦🐦 Unchecked For Quality - Discretion Requested 🐦🐦"
+        self.db_session.commit()
 
         # Remove Beep boop message
         if bot_message is not None:
             self.safe_delete_message(
                 context=context, chat_room=chat_room, message_id=bot_message.message_id
             )
-
-        # self.refresh_tracked_message(
-        #     context=context,
-        #     chat_room=chat_room,
-        #     message=[message_text],
-        #     message_type="last_scrape_message",
-        # )
 
     def check_monitored(self, context: CallbackContext) -> None:
         """Check if any monitored data sources have new data"""

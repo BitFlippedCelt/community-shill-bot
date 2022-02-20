@@ -45,5 +45,6 @@ class ChatRoom(Base):
 
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
+    chat_room_admins = relationship("ChatRoomAdmin")
     data_sources = relationship("DataSource")
     link_trackers = relationship("LinkTracker")

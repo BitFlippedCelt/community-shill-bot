@@ -8,7 +8,9 @@ from sqlalchemy.orm import sessionmaker
 
 from tg_shill_bot.data_sources.reddit import RedditDataSource
 from tg_shill_bot.data_sources.twitter import TwitterDataSource
+from tg_shill_bot.data_sources.youtube import YoutubeDataSource
 from tg_shill_bot.model import *
+from tg_shill_bot.model import data_source
 
 
 class CommonBot(object):
@@ -38,7 +40,6 @@ class CommonBot(object):
     def list_data_sources(self, chat_room: ChatRoom, data_source_type: str) -> str:
         """List data sources"""
         reply_text = ""
-
         if data_source_type == "twitter":
             reply_text = "🐦🐦 Twitter 🐦🐦\n"
         elif data_source_type == "reddit":
@@ -160,10 +161,14 @@ class CommonBot(object):
             print(f"Getting posts from {subreddit.name}")
             recent_posts += reddit_ds.get_recent(subreddit=subreddit.name)
 
-        sample_posts = (
-            random.sample(recent_posts, 20) if len(recent_posts) > 20 else recent_posts
-        )
-        return sample_posts
+        if len(recent_posts) > 10:
+            recent_posts = (
+                random.sample(recent_posts, 10)
+                if len(recent_posts) > 10
+                else recent_posts
+            )
+
+        return recent_posts
 
     def scrape_twitter_feeds(self, chat_room: ChatRoom) -> typing.List[str]:
         """Scrape twitter feeds"""
@@ -197,12 +202,50 @@ class CommonBot(object):
                 if not known_tracking:
                     recent_tweets.append(tweet)
 
-        sample_tweets = (
-            random.sample(recent_tweets, 20)
-            if len(recent_tweets) > 20
-            else recent_tweets
+        if len(recent_tweets) > 10:
+            recent_tweets = (
+                random.sample(recent_tweets, 10)
+                if len(recent_tweets) > 10
+                else recent_tweets
+            )
+
+        return recent_tweets
+
+    def scrape_youtube_feeds(self, chat_room: ChatRoom) -> typing.List[str]:
+        """Scrape Youtube feeds"""
+        ds = YoutubeDataSource()
+
+        data_sources = (
+            self.db_session.query(DataSource)
+            .filter(
+                DataSource.chat_room_id == chat_room.id,
+                DataSource.data_source_type == ds.name,
+                DataSource.ignore == False,
+            )
+            .all()
         )
-        return sample_tweets
+
+        recent_videos = []
+        for recent_video in ds.get_recent():
+            known_tracking = (
+                self.db_session.query(LinkTracker)
+                .filter(
+                    LinkTracker.chat_room_id == chat_room.id,
+                    LinkTracker.link == recent_video,
+                )
+                .first()
+            )
+            if not known_tracking:
+                recent_videos.append(recent_video)
+
+        if len(recent_videos) > 10:
+            recent_videos = (
+                random.sample(recent_videos, 10)
+                if len(recent_videos) > 10
+                else recent_videos
+            )
+
+        return recent_videos
 
     def generate_shill_call(self, chat_room: ChatRoom) -> typing.List[str]:
         """Generate a shill call"""
@@ -230,6 +273,17 @@ class CommonBot(object):
         else:
             twitter_text += "🐦🐦 So much empty?! - Feed ME! 🐦🐦\n\n"
 
+        # Get Youtube Links
+        youtube_links = self.get_links(chat_room=chat_room, link_type="youtube")
+        youtube_text = "🎥🎥 Check These Videos 🎥🎥\n\n"
+        if len(youtube_links) > 0:
+            for youtube_link in youtube_links:
+                youtube_text += f"{youtube_link.link}\n"
+
+            youtube_text += "\n🎥🎥 Comment 🎥🎥\n\n"
+        else:
+            youtube_text += "🎥🎥 So much empty?! - Feed ME! 🎥🎥\n\n"
+
         general_text = self.generate_general_shill_text(chat_room)
 
         end_text = ""
@@ -244,6 +298,7 @@ class CommonBot(object):
             start_text,
             reddit_text,
             twitter_text,
+            youtube_text,
             general_text,
             end_text,
             ad_text,
