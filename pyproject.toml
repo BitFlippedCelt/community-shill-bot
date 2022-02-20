@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "tg-shill-bot"
-version = "0.1.0"
+version = "0.1.5"
 description = "Telegram bot that monitors socials for shill potential shill targets."
 authors = ["Greg Horejsi <g.horejsi81@gmail.com>"]
 license = "MIT"

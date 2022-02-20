@@ -9,4 +9,6 @@ class ShillBot(object):
         self.logger = logging.getLogger(__name__)
 
         if telegram_token is not None:
-            self.telegram_bot = TelegramBot(telegram_token, self.db_session)
+            self.telegram_bot = TelegramBot(
+                db_session=self.db_session, token=telegram_token
+            )

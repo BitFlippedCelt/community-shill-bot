@@ -37,6 +37,8 @@ class ChatRoom(Base):
     logo_url = Column(String)
 
     link_count = Column(Integer, nullable=False, default=20)
+    link_age = Column(Integer, nullable=False, default=60)
+    scrape_count = Column(Integer, nullable=False, default=20)
 
     scrape_interval = Column(Integer, nullable=False, default=60 * 60)
     update_interval = Column(Integer, nullable=False, default=60 * 30)
