@@ -20,7 +20,8 @@ RUN apt-get update \
     && apt-get install --no-install-recommends -y \
     curl \
     build-essential \
-    libpq-dev
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # install poetry - respects $POETRY_VERSION & $POETRY_HOME
 RUN curl -sSL https://raw.githubusercontent.com/sdispater/poetry/master/get-poetry.py | python
@@ -33,6 +34,11 @@ COPY poetry.lock pyproject.toml ./
 RUN poetry install --no-dev
 
 FROM python-base as production
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder-base $PYSETUP_PATH $PYSETUP_PATH
 COPY ./src /src/
 

@@ -1,0 +1,3 @@
+services:
+  shillbot:
+    build: .

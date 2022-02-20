@@ -23,7 +23,7 @@ class YoutubeDataSource(SocialDataSource):
 
     def get_recent(self, **kwargs):
         video_search = CustomSearch(
-            query="crypto", searchPreferences="CAMSBAgBEAE%253D", limit=10
+            query="crypto", searchPreferences="CAMSBAgBEAE%3D", limit=10
         )
 
         filtered_new_posts = []

@@ -22,7 +22,7 @@ def upgrade():
         "chat_rooms",
         sa.Column("scrape_count", sa.Integer(), nullable=False, server_default="20"),
     )
-    op.drop_column("chat_rooms", "logo")
+    # op.drop_column("chat_rooms", "logo")
     # ### end Alembic commands ###
 
 
