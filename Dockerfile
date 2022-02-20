@@ -46,4 +46,6 @@ WORKDIR /src
 
 RUN python nltk_init.py
 
+COPY .env /src/.env
+
 CMD ["python", "./cli.py"]
