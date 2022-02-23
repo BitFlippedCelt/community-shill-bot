@@ -214,7 +214,13 @@ class TelegramBot(CommonBot):
             update.message.reply_text("This chat room is not initialized. Use /start")
             return
 
-        self.generate_shill_call_text(context=context, chat_room=chat_room)
+        compact = (
+            True if len(context.args) > 0 and context.args[0] == "compact" else False
+        )
+
+        self.generate_shill_call_text(
+            context=context, chat_room=chat_room, compact=compact
+        )
 
         self.safe_delete_message(
             context=context, chat_room=chat_room, message_id=update.message.message_id
@@ -357,9 +363,11 @@ class TelegramBot(CommonBot):
         """Check if any monitored data sources have new data"""
         self.logger.debug("Checking monitored data sources")
 
-    def generate_shill_call_text(self, context: CallbackContext, chat_room: ChatRoom):
+    def generate_shill_call_text(
+        self, context: CallbackContext, chat_room: ChatRoom, compact: bool = False
+    ) -> str:
         """Generate the text for the shill call"""
-        message = super().generate_shill_call(chat_room=chat_room, compact=True)
+        message = super().generate_shill_call(chat_room=chat_room, compact=compact)
 
         self.refresh_tracked_message(
             context=context,
