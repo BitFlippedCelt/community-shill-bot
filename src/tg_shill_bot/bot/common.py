@@ -301,6 +301,8 @@ class CommonBot(object):
             general_text = ""
             end_text = ""
 
+        cta_text = self.generate_cta_text(chat_room=chat_room)
+
         ad_text = self.generate_ad_text()
 
         return [
@@ -309,6 +311,7 @@ class CommonBot(object):
             twitter_text,
             youtube_text,
             general_text,
+            cta_text,
             end_text,
             ad_text,
         ]
@@ -332,21 +335,32 @@ class CommonBot(object):
                     general_text += f"🦎 {chat_room.cg_link}\n"
 
                 general_text += "\n"
-
-            if chat_room.cta_link is not None:
-                general_text += f"🔗 {chat_room.cta_link}\n"
-
-            if chat_room.tags is not None:
-                general_text += f"🚩 {chat_room.tags}\n"
-
-            if chat_room.cta_text is not None:
-                general_text += f"{chat_room.cta_text}\n"
-
         else:
             general_text = "\n"
         return general_text
 
-    def generate_ad_text(self):
+    def generate_cta_text(self, chat_room: ChatRoom) -> str:
+        """Generate CTA text"""
+        cta_text = ""
+        if chat_room is not None:
+            if (
+                chat_room.cta_link is not None
+                or chat_room.tags is not None
+                or chat_room.cta_text is not None
+            ):
+                cta_text += "💬💬 Call to Action 💬💬\n"
+                if chat_room.cta_link is not None:
+                    cta_text += f"🔗 {chat_room.cta_link}\n"
+
+                if chat_room.tags is not None:
+                    cta_text += f"🚩 {chat_room.tags}\n"
+
+                if chat_room.cta_text is not None:
+                    cta_text += f"{chat_room.cta_text}\n"
+
+        return cta_text
+
+    def generate_ad_text(self) -> str:
         # Generate advertisement
         ad_text = ""
 
