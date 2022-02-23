@@ -294,9 +294,9 @@ class CommonBot(object):
 
             end_text = ""
             if chat_room.token is not None:
-                end_text += f"👆👆 Help {chat_room.token} grow! 👆👆"
+                end_text += f"👆👆 Help {chat_room.token} grow! 👆👆\n\n"
             else:
-                end_text += "👆👆 Help us grow! 👆👆"
+                end_text += "👆👆 Help us grow! 👆👆\n\n"
         else:
             general_text = ""
             end_text = ""
@@ -319,12 +319,11 @@ class CommonBot(object):
 
         if chat_room is not None:
             if chat_room.dex_link is not None:
-                general_text += f"💹💹 Dextools 💹💹\n"
+                general_text += f"💹💹 Dextools | ⭐ | Click Links 💹💹\n"
                 general_text += f"{chat_room.dex_link} \n"
-                general_text += f"💹💹 ⭐ | Click Links 💹💹\n"
 
             if chat_room.cmc_link is not None or chat_room.cg_link is not None:
-                general_text += f"📣📣 Listing Sites 📣📣\n"
+                general_text += f"📣📣 Listing Sites | ⭐ | ⬆️ | Comment 📣📣\n"
 
                 if chat_room.cmc_link is not None:
                     general_text += f"🌐 {chat_room.cmc_link}\n"
@@ -332,7 +331,7 @@ class CommonBot(object):
                 if chat_room.cg_link is not None:
                     general_text += f"🦎 {chat_room.cg_link}\n"
 
-                general_text += "\n📣📣 ⭐ | ⬆️ | Comment 📣📣\n"
+            general_text += "\n"
 
             if chat_room.cta_link is not None:
                 general_text += f"🔗 {chat_room.cta_link}\n"
