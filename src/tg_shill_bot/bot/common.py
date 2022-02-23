@@ -315,12 +315,12 @@ class CommonBot(object):
 
     def generate_general_shill_text(self, chat_room: ChatRoom) -> str:
         """Generate general shill text"""
-        general_text = "🤩🤩 General Hygiene 🤩🤩\n"
+        general_text = ""
 
         if chat_room is not None:
             if chat_room.dex_link is not None:
                 general_text += f"💹💹 Dextools | ⭐ | Click Links 💹💹\n"
-                general_text += f"{chat_room.dex_link} \n"
+                general_text += f"{chat_room.dex_link} \n\n"
 
             if chat_room.cmc_link is not None or chat_room.cg_link is not None:
                 general_text += f"📣📣 Listing Sites | ⭐ | ⬆️ | Comment 📣📣\n"
@@ -331,7 +331,7 @@ class CommonBot(object):
                 if chat_room.cg_link is not None:
                     general_text += f"🦎 {chat_room.cg_link}\n"
 
-            general_text += "\n"
+                general_text += "\n"
 
             if chat_room.cta_link is not None:
                 general_text += f"🔗 {chat_room.cta_link}\n"
