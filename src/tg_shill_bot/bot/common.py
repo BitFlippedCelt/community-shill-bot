@@ -261,7 +261,7 @@ class CommonBot(object):
             for twitter_link in twitter_links:
                 twitter_text += f"{twitter_link.link}\n"
 
-            twitter_text += "\n\n"
+            twitter_text += "\n"
         else:
             twitter_text += "🐦🐦 So much empty?! - Feed ME! 🐦🐦\n\n"
 
@@ -273,7 +273,7 @@ class CommonBot(object):
             for reddit_link in reddit_links:
                 reddit_text += f"{reddit_link.link}\n"
 
-            reddit_text += "\n\n"
+            reddit_text += "\n"
         else:
             reddit_text += "🤖🤖 So much empty?! - Feed ME! 🤖🤖\n\n"
 
@@ -285,7 +285,7 @@ class CommonBot(object):
             for youtube_link in youtube_links:
                 youtube_text += f"{youtube_link.link}\n"
 
-            youtube_text += "\n\n"
+            youtube_text += "\n"
         else:
             youtube_text += "🎥🎥 So much empty?! - Feed ME! 🎥🎥\n\n"
 
