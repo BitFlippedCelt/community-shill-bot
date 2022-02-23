@@ -269,7 +269,7 @@ class CommonBot(object):
         reddit_links = self.get_links(chat_room=chat_room, link_type="reddit")
         reddit_text = ""
         if len(reddit_links) > 0:
-            reddit_text = "🤖🤖 ⬆️ & 💬 🤖🤖\n"
+            reddit_text = "🤖🤖 ⬆️ | 💬 🤖🤖\n"
             for reddit_link in reddit_links:
                 reddit_text += f"{reddit_link.link}\n"
 
@@ -281,7 +281,7 @@ class CommonBot(object):
         youtube_links = self.get_links(chat_room=chat_room, link_type="youtube")
         youtube_text = ""
         if len(youtube_links) > 0:
-            youtube_text = "🎥🎥 ⬆️ & 💬 🎥🎥\n"
+            youtube_text = "🎥🎥 ⬆️ | 💬 🎥🎥\n"
             for youtube_link in youtube_links:
                 youtube_text += f"{youtube_link.link}\n"
 
