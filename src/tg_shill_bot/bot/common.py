@@ -251,48 +251,49 @@ class CommonBot(object):
         self, chat_room: ChatRoom, compact: bool = False
     ) -> typing.List[str]:
         """Generate a shill call"""
-        start_text = "👇👇 📣📣 SHillcall! 📣📣 👇👇\n" if not compact else ""
-
-        # Get Reddit Links
-        reddit_links = self.get_links(chat_room=chat_room, link_type="reddit")
-        reddit_text = ""
-        if len(reddit_links) > 0:
-            reddit_text = "🤖🤖 Check These Reddit Posts 🤖🤖\n"
-            for reddit_link in reddit_links:
-                reddit_text += f"{reddit_link.link}\n"
-
-            reddit_text += "🤖🤖 ⬆️ & 📣 🤖🤖\n\n"
-        else:
-            reddit_text += "🤖🤖 So much empty?! - Feed ME! 🤖🤖\n\n"
+        start_text = "👇👇 SHillcall! 👇👇\n\n" if not compact else ""
 
         # Get Twitter Links
         twitter_links = self.get_links(chat_room=chat_room, link_type="twitter")
         twitter_text = ""
         if len(twitter_links) > 0:
-            twitter_text = "🐦🐦 Check These Tweets 🐦🐦\n"
+            twitter_text = "🐦🐦 💓 | Retweet | Follow 🐦🐦\n"
             for twitter_link in twitter_links:
                 twitter_text += f"{twitter_link.link}\n"
 
-            twitter_text += "🐦🐦 💓 & Retweet & Follow 🐦🐦\n\n"
+            twitter_text += "\n\n"
         else:
             twitter_text += "🐦🐦 So much empty?! - Feed ME! 🐦🐦\n\n"
+
+        # Get Reddit Links
+        reddit_links = self.get_links(chat_room=chat_room, link_type="reddit")
+        reddit_text = ""
+        if len(reddit_links) > 0:
+            reddit_text = "🤖🤖 ⬆️ & 💬 🤖🤖\n"
+            for reddit_link in reddit_links:
+                reddit_text += f"{reddit_link.link}\n"
+
+            reddit_text += "\n\n"
+        else:
+            reddit_text += "🤖🤖 So much empty?! - Feed ME! 🤖🤖\n\n"
 
         # Get Youtube Links
         youtube_links = self.get_links(chat_room=chat_room, link_type="youtube")
         youtube_text = ""
         if len(youtube_links) > 0:
-            youtube_text = "🎥🎥 Check These Videos 🎥🎥\n"
+            youtube_text = "🎥🎥 ⬆️ & 💬 🎥🎥\n"
             for youtube_link in youtube_links:
                 youtube_text += f"{youtube_link.link}\n"
 
-            youtube_text += "🎥🎥 Comment 🎥🎥\n\n"
+            youtube_text += "\n\n"
         else:
             youtube_text += "🎥🎥 So much empty?! - Feed ME! 🎥🎥\n\n"
 
+        # Get General Text and Formatting
         if not compact:
             general_text = self.generate_general_shill_text(chat_room)
 
-            end_text = ""
+            end_text = "\n"
             if chat_room.token is not None:
                 end_text += f"👆👆 Help {chat_room.token} grow! 👆👆\n\n"
             else:
@@ -349,14 +350,14 @@ class CommonBot(object):
                 or chat_room.cta_text is not None
             ):
                 cta_text += "💬💬 Call to Action 💬💬\n"
+                if chat_room.cta_text is not None:
+                    cta_text += f"{chat_room.cta_text}\n"
+
                 if chat_room.cta_link is not None:
                     cta_text += f"🔗 {chat_room.cta_link}\n"
 
                 if chat_room.tags is not None:
                     cta_text += f"🚩 {chat_room.tags}\n"
-
-                if chat_room.cta_text is not None:
-                    cta_text += f"{chat_room.cta_text}\n"
 
         return cta_text
 
