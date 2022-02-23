@@ -134,7 +134,7 @@ class CommonBot(object):
             .all()
         )
 
-        if chat_room.link_count < len(links):
+        if len(links) > chat_room.link_count:
             links = random.sample(links, chat_room.link_count)
 
         return links
@@ -161,10 +161,10 @@ class CommonBot(object):
             print(f"Getting posts from {subreddit.name}")
             recent_posts += reddit_ds.get_recent(subreddit=subreddit.name)
 
-        if len(recent_posts) > 10:
+        if len(recent_posts) > chat_room.link_count:
             recent_posts = (
-                random.sample(recent_posts, 10)
-                if len(recent_posts) > 10
+                random.sample(recent_posts, chat_room.link_count)
+                if len(recent_posts) > chat_room.link_count
                 else recent_posts
             )
 
@@ -202,10 +202,10 @@ class CommonBot(object):
                 if not known_tracking:
                     recent_tweets.append(tweet)
 
-        if len(recent_tweets) > 10:
+        if len(recent_tweets) > chat_room.link_count:
             recent_tweets = (
-                random.sample(recent_tweets, 10)
-                if len(recent_tweets) > 10
+                random.sample(recent_tweets, chat_room.link_count)
+                if len(recent_tweets) > chat_room.link_count
                 else recent_tweets
             )
 
@@ -238,59 +238,68 @@ class CommonBot(object):
             if not known_tracking:
                 recent_videos.append(recent_video)
 
-        if len(recent_videos) > 10:
+        if len(recent_videos) > chat_room.link_count:
             recent_videos = (
-                random.sample(recent_videos, 10)
-                if len(recent_videos) > 10
+                random.sample(recent_videos, chat_room.link_count)
+                if len(recent_videos) > chat_room.link_count
                 else recent_videos
             )
 
         return recent_videos
 
-    def generate_shill_call(self, chat_room: ChatRoom) -> typing.List[str]:
+    def generate_shill_call(
+        self, chat_room: ChatRoom, compact: bool = False
+    ) -> typing.List[str]:
         """Generate a shill call"""
-        start_text = "👇👇 📣📣 SHillcall! 📣📣 👇👇\n\n"
+        start_text = "👇👇 📣📣 SHillcall! 📣📣 👇👇\n" if not compact else ""
 
         # Get Reddit Links
         reddit_links = self.get_links(chat_room=chat_room, link_type="reddit")
-        reddit_text = "🤖🤖 Check These Reddit Posts 🤖🤖\n\n"
+        reddit_text = ""
         if len(reddit_links) > 0:
+            reddit_text = "🤖🤖 Check These Reddit Posts 🤖🤖\n"
             for reddit_link in reddit_links:
                 reddit_text += f"{reddit_link.link}\n"
 
-            reddit_text += "\n🤖🤖 ⬆️ & 📣 🤖🤖\n\n"
+            reddit_text += "🤖🤖 ⬆️ & 📣 🤖🤖\n\n"
         else:
             reddit_text += "🤖🤖 So much empty?! - Feed ME! 🤖🤖\n\n"
 
         # Get Twitter Links
         twitter_links = self.get_links(chat_room=chat_room, link_type="twitter")
-        twitter_text = "🐦🐦 Check These Tweets 🐦🐦\n\n"
+        twitter_text = ""
         if len(twitter_links) > 0:
+            twitter_text = "🐦🐦 Check These Tweets 🐦🐦\n"
             for twitter_link in twitter_links:
                 twitter_text += f"{twitter_link.link}\n"
 
-            twitter_text += "\n🐦🐦 💓 & Retweet & Follow 🐦🐦\n\n"
+            twitter_text += "🐦🐦 💓 & Retweet & Follow 🐦🐦\n\n"
         else:
             twitter_text += "🐦🐦 So much empty?! - Feed ME! 🐦🐦\n\n"
 
         # Get Youtube Links
         youtube_links = self.get_links(chat_room=chat_room, link_type="youtube")
-        youtube_text = "🎥🎥 Check These Videos 🎥🎥\n\n"
+        youtube_text = ""
         if len(youtube_links) > 0:
+            youtube_text = "🎥🎥 Check These Videos 🎥🎥\n"
             for youtube_link in youtube_links:
                 youtube_text += f"{youtube_link.link}\n"
 
-            youtube_text += "\n🎥🎥 Comment 🎥🎥\n\n"
+            youtube_text += "🎥🎥 Comment 🎥🎥\n\n"
         else:
             youtube_text += "🎥🎥 So much empty?! - Feed ME! 🎥🎥\n\n"
 
-        general_text = self.generate_general_shill_text(chat_room)
+        if not compact:
+            general_text = self.generate_general_shill_text(chat_room)
 
-        end_text = ""
-        if chat_room.token is not None:
-            end_text += f"👆👆 Help {chat_room.token} grow! 👆👆"
+            end_text = ""
+            if chat_room.token is not None:
+                end_text += f"👆👆 Help {chat_room.token} grow! 👆👆"
+            else:
+                end_text += "👆👆 Help us grow! 👆👆"
         else:
-            end_text += "👆👆 Help us grow! 👆👆"
+            general_text = ""
+            end_text = ""
 
         ad_text = self.generate_ad_text()
 
@@ -304,18 +313,18 @@ class CommonBot(object):
             ad_text,
         ]
 
-    def generate_general_shill_text(self, chat_room):
+    def generate_general_shill_text(self, chat_room: ChatRoom) -> str:
         """Generate general shill text"""
-        general_text = "🤩🤩 General Hygiene 🤩🤩\n\n"
+        general_text = "🤩🤩 General Hygiene 🤩🤩\n"
 
         if chat_room is not None:
             if chat_room.dex_link is not None:
-                general_text += f"💹💹 Dextools 💹💹\n\n"
-                general_text += f"{chat_room.dex_link} \n\n"
-                general_text += f"💹💹 ⭐ | Click Links 💹💹\n\n"
+                general_text += f"💹💹 Dextools 💹💹\n"
+                general_text += f"{chat_room.dex_link} \n"
+                general_text += f"💹💹 ⭐ | Click Links 💹💹\n"
 
             if chat_room.cmc_link is not None or chat_room.cg_link is not None:
-                general_text += f"📣📣 Listing Sites 📣📣\n\n"
+                general_text += f"📣📣 Listing Sites 📣📣\n"
 
                 if chat_room.cmc_link is not None:
                     general_text += f"🌐 {chat_room.cmc_link}\n"
@@ -323,19 +332,19 @@ class CommonBot(object):
                 if chat_room.cg_link is not None:
                     general_text += f"🦎 {chat_room.cg_link}\n"
 
-                general_text += "\n📣📣 ⭐ | ⬆️ | Comment 📣📣\n\n"
+                general_text += "\n📣📣 ⭐ | ⬆️ | Comment 📣📣\n"
 
             if chat_room.cta_link is not None:
-                general_text += f"🔗 {chat_room.cta_link}\n\n"
+                general_text += f"🔗 {chat_room.cta_link}\n"
 
             if chat_room.tags is not None:
-                general_text += f"🚩 {chat_room.tags}\n\n"
+                general_text += f"🚩 {chat_room.tags}\n"
 
             if chat_room.cta_text is not None:
-                general_text += f"{chat_room.cta_text}\n\n"
+                general_text += f"{chat_room.cta_text}\n"
 
         else:
-            general_text = "\n\n"
+            general_text = "\n"
         return general_text
 
     def generate_ad_text(self):
@@ -353,7 +362,7 @@ class CommonBot(object):
         )
 
         if ad is not None:
-            ad_text = f"\n\n👾 | <a href='{ad.link}'>{ad.name} ({ad.token})</a>"
+            ad_text = f"👾 | <a href='{ad.link}'>{ad.name} ({ad.token})</a>"
 
             if len(ad.buy_link) > 0:
                 ad_text += f" <a href='{ad.buy_link}'>💰</a>"

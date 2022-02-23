@@ -63,10 +63,12 @@ class TelegramBot(CommonBot):
         self.dispatcher.add_error_handler(self.error_handler)
 
         # Setup Telegram Background Tasks
-        self.job_queue.run_repeating(
+        self.job_scrape = self.job_queue.run_repeating(
+            self.task_scrape_data, interval=60 * 60, first=60
+        )
+        self.job_links = self.job_queue.run_repeating(
             self.task_show_recent_links, interval=60 * 15, first=60 * 5
         )
-        self.job_queue.run_repeating(self.task_scrape_data, interval=60 * 60, first=0)
         # self.job_queue.run_repeating(self.check_monitored, interval=60, first=0)
 
         # Start the Bot
@@ -276,7 +278,7 @@ class TelegramBot(CommonBot):
         """Show recent links"""
         self.logger.debug("Sending recent links listing")
 
-        # TODO: Reschedule this job
+        # TODO: Add logic to show recent links per chat room based on configured time period
 
         chats = self.db_session.query(ChatRoom).all()
         for chat in chats:
@@ -296,7 +298,7 @@ class TelegramBot(CommonBot):
         """Scrape data from social media"""
         self.logger.debug("Scraping data")
 
-        # TODO: Reschedule this job
+        # TODO: Add logic to scrape links per chat room based on configured time period
 
         chats = self.db_session.query(ChatRoom).all()
         for chat in chats:
@@ -357,7 +359,7 @@ class TelegramBot(CommonBot):
 
     def generate_shill_call_text(self, context: CallbackContext, chat_room: ChatRoom):
         """Generate the text for the shill call"""
-        message = super().generate_shill_call(chat_room=chat_room)
+        message = super().generate_shill_call(chat_room=chat_room, compact=True)
 
         self.refresh_tracked_message(
             context=context,
