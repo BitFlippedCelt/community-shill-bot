@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 import html
 import json
 import traceback
@@ -50,11 +51,12 @@ class TelegramBot(CommonBot):
         # Add command handlers
         self.dispatcher.add_handler(CommandHandler("start", self.command_start))
         self.dispatcher.add_handler(CommandHandler("help", self.command_help))
+        self.dispatcher.add_handler(CommandHandler("types", self.command_list_types))
         self.dispatcher.add_handler(
-            CommandHandler("list_types", self.command_list_types)
+            CommandHandler("sources", self.command_list_sources)
         )
         self.dispatcher.add_handler(
-            CommandHandler("list_sources", self.command_list_sources)
+            CommandHandler("shillcall", self.command_shill_call)
         )
         self.dispatcher.add_handler(CommandHandler("links", self.command_list_links))
         self.dispatcher.add_handler(CommandHandler("scrape", self.command_scrape))
@@ -160,7 +162,7 @@ class TelegramBot(CommonBot):
             )
 
         except (IndexError, ValueError):
-            update.message.reply_text("Usage: /list_types")
+            update.message.reply_text("Usage: /types")
 
     def command_list_sources(self, update: Update, context: CallbackContext) -> None:
         """List all data sources of the given type"""
@@ -168,6 +170,10 @@ class TelegramBot(CommonBot):
             chat_room = self.get_chat_room(update)
         except ValueError as e:
             self.logger.error(e)
+            return
+
+        if chat_room is None:
+            update.message.reply_text("This chat room is not initialized. Use /start")
             return
 
         try:
@@ -200,7 +206,31 @@ class TelegramBot(CommonBot):
             update.message.reply_text(reply_text.rstrip(", "))
 
         except (IndexError, ValueError):
-            update.message.reply_text("Usage: /list_sources <data_source_type>")
+            update.message.reply_text("Usage: /sources <data_source_type>")
+
+    def command_shill_call(self, update: Update, context: CallbackContext) -> None:
+        """Generate shill call for the chat room"""
+        try:
+            chat_room = self.get_chat_room(update)
+        except ValueError as e:
+            self.logger.error(e)
+            return
+
+        if chat_room is None:
+            update.message.reply_text("This chat room is not initialized. Use /start")
+            return
+
+        compact = True if "compact" in context.args else False
+
+        # TODO: Add data source type filters
+
+        self.generate_shill_call_text(
+            context=context, chat_room=chat_room, compact=compact
+        )
+
+        self.safe_delete_message(
+            context=context, chat_room=chat_room, message_id=update.message.message_id
+        )
 
     def command_list_links(self, update: Update, context: CallbackContext) -> None:
         """List recently known links"""
@@ -214,13 +244,46 @@ class TelegramBot(CommonBot):
             update.message.reply_text("This chat room is not initialized. Use /start")
             return
 
-        compact = (
-            True if len(context.args) > 0 and context.args[0] == "compact" else False
-        )
+        try:
+            data_source_type = context.args[0]
+            limit = context.args[1] if len(context.args) > 1 else 10
 
-        self.generate_shill_call_text(
-            context=context, chat_room=chat_room, compact=compact
-        )
+            reply_text = ""
+
+            if data_source_type == "twitter":
+                reply_text = "🐦🐦 Twitter 🐦🐦\n"
+            elif data_source_type == "reddit":
+                reply_text = "🤖🤖 Reddit 🤖🤖\n"
+            elif data_source_type == "youtube":
+                reply_text = "🎥🎥 Youtube 🎥🎥\n"
+
+            links = (
+                self.db_session.query(LinkTracker)
+                .filter(
+                    LinkTracker.chat_room_id == chat_room.id,
+                    LinkTracker.link_type == data_source_type,
+                    LinkTracker.created_at > datetime.utcnow() - timedelta(hours=1),
+                )
+                .limit(limit)
+                .all()
+            )
+
+            if len(links) > 0:
+                for link in links:
+                    reply_text += f"{link.link}\n"
+            else:
+                reply_text += "So much empty!\n"
+
+            self.refresh_tracked_message(
+                context=context,
+                chat_room=chat_room,
+                message=reply_text,
+                disable_web_page_preview=True,
+                message_type="links_list",
+            )
+
+        except (IndexError, ValueError):
+            update.message.reply_text("Usage: /links <link_type> <limit>")
 
         self.safe_delete_message(
             context=context, chat_room=chat_room, message_id=update.message.message_id
@@ -374,8 +437,66 @@ class TelegramBot(CommonBot):
             chat_room=chat_room,
             message=message,
             message_type="shill_call_message",
+            disable_web_page_preview=True,
             parse_mode=ParseMode.HTML,
         )
+
+    def _send_message_list(
+        self,
+        context: CallbackContext,
+        chat_room: ChatRoom,
+        message: list[str],
+        **kwargs,
+    ) -> list[int]:
+        """Send a list of messages"""
+        message_ids = []
+        try:
+            # If list of messages combined length is greater than 4096, send as multiple messages
+            if len("".join(message)) > MAX_MESSAGE_LENGTH:
+                # Break up the send into multiple messages
+                for message in message:
+                    message_ids.append(
+                        context.bot.send_message(
+                            chat_id=chat_room.chat_id,
+                            text=message,
+                            **kwargs,
+                        ).message_id
+                    )
+            else:
+                # Send the message as a single message
+                message_ids.append(
+                    context.bot.send_message(
+                        chat_id=chat_room.chat_id,
+                        text="".join(message),
+                        **kwargs,
+                    ).message_id
+                )
+
+        except TelegramError as e:
+            self.logger.error(e)
+
+        return message_ids
+
+    def _send_message_str(
+        self,
+        context: CallbackContext,
+        chat_room: ChatRoom,
+        message: str,
+        **kwargs,
+    ) -> list[int]:
+        """Send a single message"""
+        message_id = None
+        for chunk in [
+            message[i : i + MAX_MESSAGE_LENGTH]
+            for i in range(0, len(message), MAX_MESSAGE_LENGTH)
+        ]:
+            message_id = context.bot.send_message(
+                chat_id=chat_room.chat_id,
+                text=chunk,
+                **kwargs,
+            ).message_id
+
+        return message_id
 
     def send_message(
         self,
@@ -383,17 +504,29 @@ class TelegramBot(CommonBot):
         chat_room: ChatRoom,
         message: Union[str, list[str]],
         **kwargs,
-    ) -> int:
+    ) -> list[int]:
         """Send a message to a chat room"""
+        message_ids = []
         try:
-            return context.bot.send_message(
-                chat_id=chat_room.chat_id,
-                text="".join(message),
-                disable_web_page_preview=True,
-                **kwargs,
-            ).message_id
+            # Process list of messages
+            if isinstance(message, list):
+                message_ids.append(
+                    self._send_message_list(context, chat_room, message, **kwargs)
+                )
+
+            # Process a single message
+            elif isinstance(message, str):
+                message_ids.append(
+                    self._send_message_str(context, chat_room, message, **kwargs)
+                )
+
+            else:
+                self.logger.warning(f"Unknown message type {type(message)}")
+
         except TelegramError as e:
             self.logger.error(e)
+
+        return message_ids
 
     def safe_delete_message(
         self, context: CallbackContext, chat_room: ChatRoom, message_id: int
@@ -437,46 +570,11 @@ class TelegramBot(CommonBot):
                     )
 
             # Process list of messages
-            if isinstance(message, list):
-                if len("".join(message)) > MAX_MESSAGE_LENGTH:
-                    # Break up the send into multiple messages
-                    for message in message:
-                        message_ids.append(
-                            self.send_message(
-                                context=context,
-                                chat_room=chat_room,
-                                message=message,
-                                **kwargs,
-                            )
-                        )
-                else:
-                    # Send the message as a single message
-                    message_ids.append(
-                        self.send_message(
-                            context=context,
-                            chat_room=chat_room,
-                            message=message,
-                            **kwargs,
-                        )
-                    )
-
-            # Process a single message
-            elif isinstance(message, str):
-                for chunk in [
-                    str[i : i + MAX_MESSAGE_LENGTH]
-                    for i in range(0, len(str), MAX_MESSAGE_LENGTH)
-                ]:
-                    message_ids.append(
-                        self.send_message(
-                            context=context,
-                            chat_room=chat_room,
-                            message=chunk,
-                            **kwargs,
-                        )
-                    )
-
-            else:
-                self.logger.warning(f"Unknown message type {type(message)}")
+            message_ids.append(
+                self.send_message(
+                    context=context, chat_room=chat_room, message=message, **kwargs
+                )
+            )
 
         # Update the message tracking
         new_message_id_string = ",".join([str(id) for id in message_ids])
